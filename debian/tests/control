@@ -1,0 +1,3 @@
+Tests: sid-build, sid-minimal, sid-standard, bookworm-standard, trixie-standard
+Depends: cdebootstrap
+Restrictions: needs-root

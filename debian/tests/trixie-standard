@@ -1,0 +1,2 @@
+#!/bin/sh
+exec cdebootstrap Debian/trixie "${ADTTMP}/root" --debug --flavour standard
