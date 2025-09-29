@@ -1,6 +1,11 @@
 const std = @import("std");
 const c = @import("c");
 const posix = std.posix;
+comptime {
+    _ = @import("decompress_gz.zig");
+    _ = @import("decompress_xz.zig");
+    _ = @import("package.zig");
+}
 
 pub fn main() !void {
     setupSigHanlders();

@@ -9,6 +9,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const bzip2_dep = b.dependency("bzip2", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const debian_installer_dep = b.dependency("debian_installer", .{
         .target = target,
         .optimize = optimize,
@@ -28,7 +33,7 @@ pub fn build(b: *std.Build) void {
         .include_path = "config.h",
     }, .{
         .DPKG_ARCH = @tagName(debian_arch.amd64),
-        .HAVE_LIBCURL = true,
+        .HAVE_LIBCURL = null,
         .PACKAGE_BUGREPORT = "https://bugs.debian.org/cdebootstrap",
         .PACKAGE_NAME = "cdebootstrap",
         .PACKAGE_STRING = "cdebootstrap",
@@ -53,12 +58,12 @@ pub fn build(b: *std.Build) void {
     const frontend = b.addLibrary(.{
         .name = "frontend",
         .root_module = b.createModule(.{
+            .root_source_file = b.path("src/frontend/standalone/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
         }),
     });
-    frontend.linkSystemLibrary("curl");
     frontend.addConfigHeader(config_h);
     frontend.addIncludePath(b.path("include"));
     frontend.addCSourceFiles(.{
@@ -71,15 +76,11 @@ pub fn build(b: *std.Build) void {
     const helper = b.addExecutable(.{
         .name = "helper",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("helper/main.zig"),
+            .root_source_file = b.path("helper/src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "c", .module = c_mod },
-            },
         }),
     });
-    helper.linkSystemLibrary("archive");
 
     const run = b.addRunArtifact(helper);
     run.addDirectoryArg(b.path("helper"));
@@ -106,9 +107,8 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    exe.linkSystemLibrary("z");
-    exe.linkSystemLibrary("lzma");
-    exe.linkSystemLibrary("bzip2");
+    //exe.linkSystemLibrary("z");
+    //exe.linkSystemLibrary("lzma");
     exe.addConfigHeader(config_h);
     exe.addIncludePath(b.path("include"));
     exe.addCSourceFiles(.{
@@ -117,6 +117,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.addIncludePath(debian_installer.getEmittedIncludeTree());
     exe.linkLibrary(frontend);
+    exe.linkLibrary(bzip2_dep.artifact("bz2"));
     b.installArtifact(exe);
 
     const run_step = b.step("run", "Run the app");
@@ -148,15 +149,15 @@ const frontend_standalone = [_][]const u8{
 const cdebootstrap_sources = [_][]const u8{
     "check.c",
     "decompress_bz.c",
-    "decompress_gz.c",
-    "decompress_xz.c",
+    //"decompress_gz.c",
+    //"decompress_xz.c",
     "decompress_null.c",
     "download.c",
     "execute.c",
     "gpg.c",
     "install.c",
     "log.c",
-    "package.c",
+    //"package.c",
     "suite.c",
     "suite_action.c",
     "suite_config.c",

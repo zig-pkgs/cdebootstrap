@@ -2,6 +2,7 @@
 #include <config.h>
 #include "frontend.h"
 #include "install.h"
-
-#include <archive.h>
-#include <archive_entry.h>
+#include "decompress.h"
+#include "download.h"
+#include "target.h"
+#include "execute.h"

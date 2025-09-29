@@ -104,6 +104,7 @@ static struct option const long_opts[] =
 
 char *program_name;
 
+#if 0
 int frontend_download(const char *source, const char *target)
 {
   char buf[1024];
@@ -181,6 +182,7 @@ int frontend_download(const char *source, const char *target)
   return WEXITSTATUS(ret);
 #endif
 }
+#endif
 
 static void mirror_init()
 {
