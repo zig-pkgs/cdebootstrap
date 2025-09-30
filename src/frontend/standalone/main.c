@@ -54,6 +54,14 @@
 #include <string.h>
 #include <unistd.h>
 
+// On Linux, if it's not glibc, it's likely musl or another similar libc.
+// canonicalize_file_name is a GNU extension, not available in musl.
+#if defined(__linux__) && !defined(__GLIBC__)
+    // realpath(path, NULL) is the POSIX equivalent that allocates memory,
+    // mimicking the behavior of canonicalize_file_name.
+    #define canonicalize_file_name(path) realpath(path, NULL)
+#endif
+
 const char *target_root;
 
 const char *mirror;
