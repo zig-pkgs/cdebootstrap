@@ -54,12 +54,8 @@
 #include <string.h>
 #include <unistd.h>
 
-// On Linux, if it's not glibc, it's likely musl or another similar libc.
-// canonicalize_file_name is a GNU extension, not available in musl.
 #if defined(__linux__) && !defined(__GLIBC__)
-    // realpath(path, NULL) is the POSIX equivalent that allocates memory,
-    // mimicking the behavior of canonicalize_file_name.
-    #define canonicalize_file_name(path) realpath(path, NULL)
+  extern char *canonicalize_file_name (const char *name);
 #endif
 
 const char *target_root;
@@ -112,7 +108,7 @@ static struct option const long_opts[] =
 
 char *program_name;
 
-#if 0
+#if 0 // we use zig 's std.http.Client
 int frontend_download(const char *source, const char *target)
 {
   char buf[1024];

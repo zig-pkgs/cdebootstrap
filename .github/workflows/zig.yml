@@ -1,0 +1,87 @@
+name: Zig CI and Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*' # Triggers the workflow when a tag like v1.0, v2.3.4 is pushed
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+        optimize: [small, fast]
+    name: Build for ${{ matrix.target }} (${{ matrix.optimize }})
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          lfs: 'true'
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0-dev.393+dd4be26f5
+
+      - name: Build release binary
+        run: zig build --release=${{ matrix.optimize }} -Dtarget=${{ matrix.target }}-linux
+
+      - name: Upload artifact for release job
+        # This step only runs if we are building a tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdebootstrap-linux-${{ matrix.target }}-${{ matrix.optimize }}
+          path: zig-out/bin/cdebootstrap
+
+      - name: Package helper directory
+        if: startsWith(github.ref, 'refs/tags/') && matrix.target == 'x86_64' && matrix.optimize == 'small'
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          tar -czf helper-${TAG}.tar.gz -C zig-out/helper .
+
+      - name: Upload helper artifact
+        if: startsWith(github.ref, 'refs/tags/') && matrix.target == 'x86_64' && matrix.optimize == 'small'
+        uses: actions/upload-artifact@v4
+        with:
+          name: helper-package
+          path: helper-*.tar.gz
+
+  release:
+    # This job will only run when a tag is pushed
+    if: startsWith(github.ref, 'refs/tags/')
+    # It depends on the build job to succeed first
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create GitHub Release
+    
+    # Grant permissions to create a release
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          for art_dir in artifacts/cdebootstrap-linux-*; do
+            binary_name=$(basename "$art_dir")
+            mv "$art_dir/cdebootstrap" "$binary_name"
+          done
+          if [ -d "artifacts/helper-package" ]; then
+            mv artifacts/helper-package/* .
+          fi
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cdebootstrap-linux-*
+            helper-*.tar.gz

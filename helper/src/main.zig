@@ -54,11 +54,11 @@ fn createDebianPkg(gpa: mem.Allocator, path: []const u8, control: []const u8, da
         .mtime = std.time.timestamp(),
         .mode = 0o644,
     });
-    try ar_writer.addFileFromBytes("control.tar.gz", control, .{
+    try ar_writer.addFileFromBytes("control.tar", control, .{
         .mtime = std.time.timestamp(),
         .mode = 0o644,
     });
-    try ar_writer.addFileFromBytes("data.tar.gz", data, .{
+    try ar_writer.addFileFromBytes("data.tar", data, .{
         .mtime = std.time.timestamp(),
         .mode = 0o644,
     });
@@ -69,6 +69,8 @@ fn createDebianPkg(gpa: mem.Allocator, path: []const u8, control: []const u8, da
 fn createTarBall(gpa: mem.Allocator, pkg_meta_dir: std.fs.Dir) ![]u8 {
     var allocating: std.Io.Writer.Allocating = .init(gpa);
     defer allocating.deinit();
+
+    var tar_writer: tar.Writer = .{ .underlying_writer = &allocating.writer };
 
     var walker = try pkg_meta_dir.walk(gpa);
     defer walker.deinit();
@@ -82,21 +84,24 @@ fn createTarBall(gpa: mem.Allocator, pkg_meta_dir: std.fs.Dir) ![]u8 {
                 var file = try entry.dir.openFile(entry.basename, .{});
                 defer file.close();
 
-                const stat = try std.posix.fstat(file.handle);
+                const stat = try file.stat();
 
                 var file_reader = file.reader(&read_buf);
                 const reader = &file_reader.interface;
 
-                var tar_writer: tar.Writer = .{ .underlying_writer = &allocating.writer };
-                try tar_writer.writeFileStream(entry.path, @intCast(stat.size), reader, .{
+                try tar_writer.writeFileStream(entry.path, stat.size, reader, .{
                     .uid = 0,
                     .gid = 0,
-                    .mode = stat.mode,
+                    .mode = @intCast(stat.mode),
                 });
             },
             else => {},
         }
     }
+
+    if (allocating.written().len == 0) try tar_writer.finishPedantically();
+
+    try allocating.writer.flush();
 
     return try allocating.toOwnedSlice();
 }

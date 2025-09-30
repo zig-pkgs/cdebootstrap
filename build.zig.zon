@@ -33,16 +33,13 @@
     // internet connectivity.
     .dependencies = .{
         .debian_installer = .{
-            .url = "deps/libdebian-installer",
-            .hash = "debian_installer-0.125.0-8mB8rdTDAwCJdmALSoNhO6iYn3HeGPzt2Qo5hfbh-AR6",
+            .path = "deps/libdebian-installer",
         },
         .debconfclient = .{
-            .url = "deps/debconfclient",
-            .hash = "debconfclient-0.280.0-FWArXRQyAAA8n1lk-NkNizRQxiI8CO0AtpPd2yO3hxU5",
+            .path = "deps/debconfclient",
         },
         .bzip2 = .{
-            .url = "deps/bzip2",
-            .hash = "bzip2-1.0.8-CFZyahJTLwDiW8zRWxupQeeUkRVrDc1pgMkTl-wNsN0i",
+            .path = "deps/bzip2",
         },
     },
     .paths = .{
