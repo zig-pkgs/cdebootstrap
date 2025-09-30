@@ -1,0 +1,21 @@
+.{
+    .{
+        .match_origin = .undefined,
+        .set_origin = .debian,
+    },
+    .{
+        .match_origin = .debian,
+        .mirror = "http://deb.debian.org/debian",
+        .keyring = "debian-archive-keyring.gpg",
+    },
+    .{
+        .match_origin = .kali,
+        .mirror = "http://http.kali.org",
+        .keyring = "kali-archive-keyring.gpg",
+    },
+    .{
+        .match_origin = .ubuntu,
+        .mirror = "http://archive.ubuntu.com/ubuntu",
+        .keyring = "ubuntu-archive-keyring.gpg",
+    },
+}

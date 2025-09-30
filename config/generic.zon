@@ -1,0 +1,54 @@
+.{
+    .sections = .{
+        .base = .{
+            .flavour = .{ .build, .minimal, .standard },
+            .packages = .{
+                .{ .names = .{"apt"}, .flags = .{.essential} },
+            },
+        },
+        .build = .{
+            .flavour = .{.build},
+            .packages = .{
+                .{ .names = .{ "build-essential", "fakeroot" } },
+            },
+        },
+        .standard = .{
+            .flavour = .{.standard},
+            .packages = .{
+                .{ .names = .{ "priority-required", "priority-important", "-makedev" } },
+            },
+        },
+    },
+    .actions = .{
+        .{ .action = .@"essential-extract" },
+        .{ .action = .mount, .what = "proc" },
+        .{
+            .action = .@"essential-install",
+            .what = "dpkg",
+            .flags = .{ .force, .only },
+        },
+        .{
+            .action = .@"essential-install",
+            .what = "base-passwd",
+            .flags = .{ .force, .only },
+        },
+        .{ .action = .@"helper-install", .what = "cdebootstrap-helper-rc.d" },
+        .{ .action = .@"helper-install", .what = "cdebootstrap-helper-makedev" },
+        .{ .action = .@"essential-unpack", .what = "essential" },
+        .{ .action = .@"essential-configure" },
+        .{ .action = .@"essential-install" },
+        .{ .action = .@"helper-install", .what = "cdebootstrap-helper-apt" },
+        .{ .action = .install },
+        .{ .action = .@"helper-remove", .what = "cdebootstrap-helper-apt" },
+        .{
+            .action = .@"helper-remove",
+            .what = "cdebootstrap-helper-rc.d",
+            .flavour = .{.standard},
+        },
+        .{
+            .action = .@"helper-remove",
+            .what = "cdebootstrap-helper-makedev",
+        },
+    },
+}
+
