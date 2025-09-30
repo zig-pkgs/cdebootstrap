@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const log = std.log.scoped(.package);
 const native_endian = @import("builtin").cpu.arch.endian();
+const ar = @import("ar");
 const c = @import("c");
 
 const gpa = std.heap.c_allocator;
@@ -14,14 +15,13 @@ fn packageExtractSelfBz(reader: *std.Io.Reader, len: usize) !void {
     const Context = struct {
         decomp: *c.struct_decompress_bz,
         err: ?anyerror = null,
+        file_out: std.fs.File = .{ .handle = -1 },
 
         fn handler(file: ?*c.FILE, user_data: ?*anyopaque) callconv(.c) void {
             const context: *@This() = @ptrCast(@alignCast(user_data));
+            context.file_out = .{ .handle = c.fileno(file) };
             const r = c.decompress_bz(context.decomp, c.fileno(file));
-            if (r <= 0) {
-                context.err = error.DecompressXz;
-                std.posix.close(c.fileno(file));
-            }
+            if (r <= 0) context.err = error.DecompressXz;
         }
 
         pub fn deinit(self: *@This()) void {
@@ -62,7 +62,13 @@ fn packageExtractSelfBz(reader: *std.Io.Reader, len: usize) !void {
         return error.ExecutionFailure;
     }
 
-    if (context.err) |err| return err;
+    if (context.err) |err| switch (err) {
+        error.EndOfStream => {},
+        else => |e| {
+            context.file_out.close();
+            return e;
+        },
+    };
 }
 
 fn packageExtractSelfGz(reader: *std.Io.Reader, len: usize) !void {
@@ -72,19 +78,17 @@ fn packageExtractSelfGz(reader: *std.Io.Reader, len: usize) !void {
         reader: *std.Io.Reader,
         limit: std.Io.Limit,
         err: ?anyerror = null,
+        file_out: std.fs.File = .{ .handle = -1 },
 
         fn handler(file: ?*c.FILE, user_data: ?*anyopaque) callconv(.c) void {
-            const file_out: std.fs.File = .{ .handle = c.fileno(file) };
             var write_buf: [4 * 1024]u8 = undefined;
             var flate_buffer: [std.compress.flate.max_window_len]u8 = undefined;
-            var file_out_writer = file_out.writer(&write_buf);
             const context: *@This() = @ptrCast(@alignCast(user_data));
+            context.file_out = .{ .handle = c.fileno(file) };
+            var file_out_writer = context.file_out.writer(&write_buf);
             var decompress: std.compress.flate.Decompress = .init(context.reader, .gzip, &flate_buffer);
-            _ = decompress.reader.streamExact(&file_out_writer.interface, context.limit.toInt().?) catch |err| {
-                if (err != error.EndOfStream) {
-                    context.err = err;
-                    std.posix.close(c.fileno(file));
-                }
+            _ = decompress.reader.streamRemaining(&file_out_writer.interface) catch |err| {
+                context.err = err;
                 return;
             };
         }
@@ -122,6 +126,14 @@ fn packageExtractSelfGz(reader: *std.Io.Reader, len: usize) !void {
     if (ret != 0) {
         return error.ExecutionFailure;
     }
+
+    if (context.err) |err| switch (err) {
+        error.EndOfStream => {},
+        else => |e| {
+            context.file_out.close();
+            return e;
+        },
+    };
 }
 
 fn packageExtractSelfXz(reader: *std.Io.Reader, len: usize) !void {
@@ -131,22 +143,19 @@ fn packageExtractSelfXz(reader: *std.Io.Reader, len: usize) !void {
         reader: *std.Io.Reader,
         limit: std.Io.Limit,
         err: ?anyerror = null,
+        file_out: std.fs.File = .{ .handle = -1 },
 
         fn handler(file: ?*c.FILE, user_data: ?*anyopaque) callconv(.c) void {
-            const file_out: std.fs.File = .{ .handle = c.fileno(file) };
             var write_buf: [4 * 1024]u8 = undefined;
-            var file_out_writer = file_out.writer(&write_buf);
             const context: *@This() = @ptrCast(@alignCast(user_data));
+            context.file_out = .{ .handle = c.fileno(file) };
+            var file_out_writer = context.file_out.writer(&write_buf);
             var decompress = std.compress.xz.Decompress.init(context.reader, gpa, &.{}) catch |err| {
                 context.err = err;
-                std.posix.close(c.fileno(file));
                 return;
             };
-            _ = decompress.reader.streamExact(&file_out_writer.interface, context.limit.toInt().?) catch |err| {
-                if (err != error.EndOfStream) {
-                    context.err = err;
-                    std.posix.close(c.fileno(file));
-                }
+            _ = decompress.reader.streamRemaining(&file_out_writer.interface) catch |err| {
+                context.err = err;
                 return;
             };
         }
@@ -184,6 +193,14 @@ fn packageExtractSelfXz(reader: *std.Io.Reader, len: usize) !void {
     if (ret != 0) {
         return error.ExecutionFailure;
     }
+
+    if (context.err) |err| switch (err) {
+        error.EndOfStream => {},
+        else => |e| {
+            context.file_out.close();
+            return e;
+        },
+    };
 }
 
 fn packageExtractSelfNull(reader: *std.Io.Reader, len: usize) !void {
@@ -193,12 +210,13 @@ fn packageExtractSelfNull(reader: *std.Io.Reader, len: usize) !void {
         reader: *std.Io.Reader,
         limit: std.Io.Limit,
         err: ?anyerror = null,
+        file_out: std.fs.File = .{ .handle = -1 },
 
         fn handler(file: ?*c.FILE, user_data: ?*anyopaque) callconv(.c) void {
-            const file_out: std.fs.File = .{ .handle = c.fileno(file) };
             var write_buf: [4 * 1024]u8 = undefined;
-            var file_out_writer = file_out.writer(&write_buf);
             const context: *@This() = @ptrCast(@alignCast(user_data));
+            context.file_out = .{ .handle = c.fileno(file) };
+            var file_out_writer = context.file_out.writer(&write_buf);
             const size = context.limit.toInt().?;
             _ = context.reader.streamExact(&file_out_writer.interface, size) catch |err| {
                 context.err = err;
@@ -240,25 +258,16 @@ fn packageExtractSelfNull(reader: *std.Io.Reader, len: usize) !void {
         return error.ExecutionFailure;
     }
 
-    if (context.err) |err| return err;
+    if (context.err) |err| switch (err) {
+        error.EndOfStream => {},
+        else => |e| {
+            context.file_out.close();
+            return e;
+        },
+    };
 }
 
-// --- Constants for the 'ar' archive format ---
-const ARMAG = "!<arch>\n";
-const ARFMAG = "`\n";
 const DEBIAN_BINARY_CONTENT = "2.0\n";
-
-/// Represents the header for a single member in a Unix 'ar' archive.
-/// The @c_packed struct ensures there's no padding, matching the on-disk format.
-const ArHdr = extern struct {
-    name: [16]u8 align(1),
-    date: [12]u8 align(1),
-    uid: [6]u8 align(1),
-    gid: [6]u8 align(1),
-    mode: [8]u8 align(1),
-    size: [10]u8 align(1),
-    fmag: [2]u8 align(1),
-};
 
 /// Errors that can occur during archive processing.
 const PackageExtractError = error{
@@ -299,49 +308,30 @@ pub fn packageExtractSelf(file: std.fs.File) !void {
     var read_buffer: [4 * 1024]u8 = undefined;
     var file_reader = file.reader(&read_buffer);
     const reader = &file_reader.interface;
+    var it = try ar.Iterator.init(reader);
 
-    // 1. Verify the global archive magic string: "!<arch>\n"
-    const magic = try reader.takeArray(ARMAG.len);
-    if (!std.mem.eql(u8, magic, ARMAG)) {
-        return error.InvalidArchiveFormat;
-    }
-
-    // 2. Loop through the members until a 'data.tar.*' is found and extracted.
-    while (true) {
-        const arh = try reader.takeStruct(ArHdr, native_endian);
-
-        // Verify the member's magic string: "`\n"
-        if (!std.mem.eql(u8, &arh.fmag, ARFMAG)) {
-            return error.InvalidMemberFormat;
-        }
-
-        const member_len = try parseMemberSize(&arh.size);
-
-        // For comparison, trim trailing spaces and the trailing '/' common in some ar variants.
-        const member_name = std.mem.trimRight(u8, &arh.name, " /");
-
+    while (try it.next()) |f| {
         // 3. Identify the member and act on it.
-        if (std.mem.eql(u8, member_name, "debian-binary")) {
-            if (member_len != DEBIAN_BINARY_CONTENT.len) return error.InvalidDebianBinary;
-
-            const info = try reader.takeArray(DEBIAN_BINARY_CONTENT.len);
-            if (!std.mem.eql(u8, info, DEBIAN_BINARY_CONTENT)) {
+        if (std.mem.eql(u8, f.name, "debian-binary")) {
+            if (f.size != DEBIAN_BINARY_CONTENT.len) return error.InvalidDebianBinary;
+            var info_buf: [DEBIAN_BINARY_CONTENT.len]u8 = undefined;
+            var info_writer: std.Io.Writer = .fixed(&info_buf);
+            try it.streamRemaining(f, &info_writer);
+            if (!std.mem.eql(u8, &info_buf, DEBIAN_BINARY_CONTENT)) {
                 return error.InvalidDebianBinary;
             }
-        } else if (std.mem.eql(u8, member_name, "data.tar.bz2")) {
-            return try packageExtractSelfBz(reader, member_len);
-        } else if (std.mem.eql(u8, member_name, "data.tar.gz")) {
-            return try packageExtractSelfGz(reader, member_len);
-        } else if (std.mem.eql(u8, member_name, "data.tar.xz")) {
-            return packageExtractSelfXz(reader, member_len);
-        } else if (std.mem.eql(u8, member_name, "data.tar")) {
-            return try packageExtractSelfNull(reader, member_len);
-        } else {
-            // This is not a member we care about, so seek past its data.
-            // The 'ar' format requires that each member's data is padded to an
-            // even number of bytes.
-            const seek_len = member_len + (member_len & 1);
-            try reader.discardAll(seek_len);
+        } else if (std.mem.eql(u8, f.name, "data.tar.bz2")) {
+            defer it.unread_file_bytes = 0; // we are using reader directly
+            return try packageExtractSelfBz(reader, f.size);
+        } else if (std.mem.eql(u8, f.name, "data.tar.gz")) {
+            defer it.unread_file_bytes = 0; // we are using reader directly
+            return try packageExtractSelfGz(reader, f.size);
+        } else if (std.mem.eql(u8, f.name, "data.tar.xz")) {
+            defer it.unread_file_bytes = 0; // we are using reader directly
+            return packageExtractSelfXz(reader, f.size);
+        } else if (std.mem.eql(u8, f.name, "data.tar")) {
+            defer it.unread_file_bytes = 0; // we are using reader directly
+            return try packageExtractSelfNull(reader, f.size);
         }
     }
 }

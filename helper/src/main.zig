@@ -1,7 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
-const ar = @import("ar.zig");
-const tar = @import("tar.zig");
+const ar = @import("ar");
+const tar = @import("tar");
 
 pub fn main() !void {
     const helperdir = mem.span(std.os.argv[1]);

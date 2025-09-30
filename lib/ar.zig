@@ -52,7 +52,7 @@ pub const Header = extern struct {
     }
 
     pub fn getName(w: Header) []const u8 {
-        return mem.trimEnd(u8, &w.name, " ");
+        return mem.trimEnd(u8, &w.name, " /");
     }
 
     pub fn getSize(w: Header) !u64 {

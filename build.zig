@@ -9,6 +9,18 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const ar_mod = b.addModule("ar", .{
+        .root_source_file = b.path("lib/ar.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const tar_mod = b.addModule("tar", .{
+        .root_source_file = b.path("lib/tar.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const bzip2_dep = b.dependency("bzip2", .{
         .target = target,
         .optimize = optimize,
@@ -79,6 +91,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("helper/src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{
+                .{ .name = "ar", .module = ar_mod },
+                .{ .name = "tar", .module = tar_mod },
+            },
         }),
     });
 
@@ -104,6 +120,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "c", .module = c_mod },
+                .{ .name = "ar", .module = ar_mod },
             },
         }),
     });
