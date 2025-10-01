@@ -342,6 +342,7 @@ int install_init(const char *_helperdir)
   return 0;
 }
 
+#if 0
 int install_mount (const char *what)
 {
   char buf[PATH_MAX];
@@ -369,6 +370,7 @@ int install_mount (const char *what)
 
   return ret;
 }
+#endif
 
 int install_helper_install (const char *name)
 {

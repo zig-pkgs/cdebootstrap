@@ -6,3 +6,6 @@
 #include "download.h"
 #include "target.h"
 #include "execute.h"
+
+#include <errno.h>
+#include <sys/mount.h>

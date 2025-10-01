@@ -5,6 +5,7 @@ comptime {
     _ = @import("decompress_gz.zig");
     _ = @import("decompress_xz.zig");
     _ = @import("package.zig");
+    _ = @import("install.zig");
 }
 
 pub fn main() !void {
