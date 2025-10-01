@@ -175,7 +175,7 @@ const frontend_standalone = [_][]const u8{
 };
 
 const cdebootstrap_sources = [_][]const u8{
-    "check.c",
+    //"check.c",
     "decompress_bz.c",
     //"decompress_gz.c",
     //"decompress_xz.c",
