@@ -3,6 +3,7 @@ const mem = std.mem;
 const posix = std.posix;
 const testing = std.testing;
 const assert = std.debug.assert;
+const native_endian = @import("builtin").cpu.arch.endian();
 
 pub const Writer = @import("ar/Writer.zig");
 
@@ -64,8 +65,8 @@ pub const Header = extern struct {
 /// Iterator over entries in the tar file represented by reader.
 pub const Iterator = struct {
     reader: *std.Io.Reader,
+    arena: std.heap.ArenaAllocator,
     header: Header = .{},
-    buffer: [4 * 1024]u8 = undefined,
 
     // bytes of padding to the end of the block
     padding: bool = false,
@@ -78,20 +79,25 @@ pub const Iterator = struct {
         size: u64 = 0,
     };
 
-    pub fn init(reader: *std.Io.Reader) !Iterator {
+    pub fn init(gpa: mem.Allocator, reader: *std.Io.Reader) !Iterator {
         const magic_buf = try reader.takeArray(magic.len);
         if (!mem.eql(u8, magic_buf, magic))
             return error.InvalidArchiveMagic;
         return .{
+            .arena = .init(gpa),
             .reader = reader,
         };
+    }
+
+    pub fn deinit(self: *Iterator) void {
+        self.arena.deinit();
     }
 
     pub fn readHeader(self: *Iterator) !?Header {
         if (self.padding) {
             try self.reader.discardAll(1);
         }
-        self.header = self.reader.takeStruct(Header, .big) catch |err| switch (err) {
+        self.header = self.reader.takeStruct(Header, native_endian) catch |err| switch (err) {
             error.EndOfStream => return null,
             else => |e| return e,
         };
@@ -109,12 +115,13 @@ pub const Iterator = struct {
             try self.reader.discardAll64(self.unread_file_bytes);
             self.unread_file_bytes = 0;
         }
+        const arena = self.arena.allocator();
         if (try self.readHeader()) |header| {
             const size = try header.getSize();
             self.padding = size % 2 != 0;
             self.unread_file_bytes = size;
             return .{
-                .name = header.getName(),
+                .name = try arena.dupe(u8, header.getName()),
                 .size = size,
             };
         }
@@ -146,7 +153,8 @@ test Iterator {
 
     var reader: std.Io.Reader = .fixed(buffer.written());
 
-    var it: Iterator = try .init(&reader);
+    var it: Iterator = try .init(testing.allocator, &reader);
+    defer it.deinit();
     {
         const file = (try it.next()).?;
         var allocating: std.Io.Writer.Allocating = .init(testing.allocator);

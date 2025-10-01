@@ -279,6 +279,8 @@ const PackageExtractError = error{
     InvalidMemberSize,
     /// The 'debian-binary' member has an unexpected size or content.
     InvalidDebianBinary,
+    /// Missing debian-binary or data file
+    InvalidDebianPackage,
 };
 
 /// Parses the member size from the ar_hdr.size field.
@@ -308,11 +310,16 @@ pub fn packageExtractSelf(file: std.fs.File) !void {
     var read_buffer: [4 * 1024]u8 = undefined;
     var file_reader = file.reader(&read_buffer);
     const reader = &file_reader.interface;
-    var it = try ar.Iterator.init(reader);
+    var it = try ar.Iterator.init(gpa, reader);
+    defer it.deinit();
+
+    var found_debian_binary: bool = false;
+    var found_data_file: bool = false;
 
     while (try it.next()) |f| {
         // 3. Identify the member and act on it.
         if (std.mem.eql(u8, f.name, "debian-binary")) {
+            found_debian_binary = true;
             if (f.size != DEBIAN_BINARY_CONTENT.len) return error.InvalidDebianBinary;
             var info_buf: [DEBIAN_BINARY_CONTENT.len]u8 = undefined;
             var info_writer: std.Io.Writer = .fixed(&info_buf);
@@ -321,18 +328,30 @@ pub fn packageExtractSelf(file: std.fs.File) !void {
                 return error.InvalidDebianBinary;
             }
         } else if (std.mem.eql(u8, f.name, "data.tar.bz2")) {
+            found_data_file = true;
             defer it.unread_file_bytes = 0; // we are using reader directly
             return try packageExtractSelfBz(reader, f.size);
         } else if (std.mem.eql(u8, f.name, "data.tar.gz")) {
+            found_data_file = true;
             defer it.unread_file_bytes = 0; // we are using reader directly
             return try packageExtractSelfGz(reader, f.size);
         } else if (std.mem.eql(u8, f.name, "data.tar.xz")) {
+            found_data_file = true;
             defer it.unread_file_bytes = 0; // we are using reader directly
             return packageExtractSelfXz(reader, f.size);
         } else if (std.mem.eql(u8, f.name, "data.tar")) {
+            found_data_file = true;
             defer it.unread_file_bytes = 0; // we are using reader directly
             return try packageExtractSelfNull(reader, f.size);
         }
+    }
+
+    if (!found_data_file or !found_debian_binary) {
+        log.err("found_data_file={}, found_debain_binary={}", .{
+            found_data_file,
+            found_debian_binary,
+        });
+        return error.InvalidDebianPackage;
     }
 }
 
@@ -343,6 +362,7 @@ export fn package_get_local_filename(package: [*c]c.di_package) [*c]const u8 {
 
 export fn package_extract(package: [*c]c.di_package) c_int {
     const filename = mem.span(package.*.filename);
+    log.debug("extract {s} to {s}", .{ filename, c.target_root });
 
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = std.fmt.bufPrint(&buf, "{s}/var/cache/bootstrap/{s}", .{
@@ -363,5 +383,7 @@ export fn package_extract(package: [*c]c.di_package) c_int {
         log.err("failed to extract file '{s}': {t}", .{ path, err });
         return -1;
     };
+
+    log.debug("package extraction success {s}", .{filename});
     return 0;
 }
